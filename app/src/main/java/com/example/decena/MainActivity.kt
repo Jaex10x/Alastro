@@ -1,5 +1,6 @@
 package com.example.decena
 
+import java.util.Calendar
 import android.os.Bundle
 import android.view.View
 import android.widget.ImageView
@@ -94,6 +95,42 @@ class MainActivity : AppCompatActivity() {
         loadFragment(ProfileFragment())
         // This turns off all highlights on the bottom bar
         updateNavState(0)
+    }
+    // Add this function to insert sample tasks (call it once for testing)
+    private fun insertSampleTasks() {
+        val dbHelper = TaskDatabaseHelper(this)
+
+        val calendar = Calendar.getInstance()
+
+        // Sample tasks for today
+        val tasks = listOf(
+            Task(
+                title = "Morning Meeting",
+                description = "Team standup meeting",
+                date = calendar.timeInMillis,
+                time = "09:00 AM",
+                priority = "High",
+                category = "Work"
+            ),
+            Task(
+                title = "Lunch Break",
+                description = "Take a break",
+                date = calendar.timeInMillis,
+                time = "12:00 PM",
+                priority = "Low",
+                category = "Personal"
+            ),
+            Task(
+                title = "Project Review",
+                description = "Review project progress",
+                date = calendar.timeInMillis,
+                time = "03:00 PM",
+                priority = "Medium",
+                category = "Work"
+            )
+        )
+
+        tasks.forEach { dbHelper.addTask(it) }
     }
 }
 

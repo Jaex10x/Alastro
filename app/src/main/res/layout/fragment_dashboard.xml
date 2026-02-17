@@ -16,6 +16,7 @@
         app:layout_constraintTop_toTopOf="parent">
 
         <TextView
+            android:id="@+id/monthTextView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="February"
@@ -24,6 +25,7 @@
             android:textColor="@color/text_dark"/>
 
         <ImageView
+            android:id="@+id/arrowDown"
             android:layout_width="16dp"
             android:layout_height="16dp"
             android:src="@android:drawable/arrow_down_float"
@@ -60,14 +62,12 @@
         app:layout_constraintBottom_toBottomOf="parent">
 
         <LinearLayout
+            android:id="@+id/tasksContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <include layout="@layout/item_timeline_task" />
-            <include layout="@layout/item_timeline_task" />
-            <include layout="@layout/item_timeline_task" />
-            <include layout="@layout/item_timeline_task" />
+            <!-- We'll add RecyclerView programmatically -->
 
         </LinearLayout>
     </ScrollView>
