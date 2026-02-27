@@ -24,10 +24,11 @@ class DashboardFragment : Fragment() {
     private lateinit var tasksContainer: LinearLayout
     private lateinit var scrollView: ScrollView
     private lateinit var recyclerView: RecyclerView
-    private lateinit var taskAdapter: TaskAdapter
+    private lateinit var timelineAdapter: TimelineTaskAdapter
     private lateinit var viewModel: TasksViewModel
     private lateinit var databaseHelper: TaskDatabaseHelper
     private lateinit var sharedViewModel: SharedViewModel
+    private lateinit var tvNoTasks: TextView
 
     private var selectedDate: Calendar = Calendar.getInstance()
     private val monthFormatter = SimpleDateFormat("MMMM", Locale.getDefault())
@@ -47,6 +48,9 @@ class DashboardFragment : Fragment() {
             setupRecyclerView()
             setupViewModels()
             setupClickListeners(view)
+
+            // Load tasks for current month
+            loadTasksForCurrentMonth()
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
@@ -56,6 +60,7 @@ class DashboardFragment : Fragment() {
     private fun initializeViews(view: View) {
         btnMonthSelector = view.findViewById(R.id.btnMonthSelector)
         imgProfile = view.findViewById(R.id.imgProfile)
+        tvNoTasks = view.findViewById(R.id.tvNoTasks)
 
         // Find ScrollView
         scrollView = view.findViewById(R.id.scrollView)
@@ -63,7 +68,7 @@ class DashboardFragment : Fragment() {
         // Get the LinearLayout inside ScrollView
         tasksContainer = scrollView.getChildAt(0) as LinearLayout
 
-        // Clear the static includes
+        // Clear any existing views
         tasksContainer.removeAllViews()
     }
 
@@ -78,21 +83,16 @@ class DashboardFragment : Fragment() {
 
         tasksContainer.addView(recyclerView)
 
-        taskAdapter = TaskAdapter(
+        timelineAdapter = TimelineTaskAdapter(
             tasks = emptyList(),
             onTaskCheckedListener = { task, isChecked ->
                 viewModel.updateTaskCompletion(task.id, isChecked)
-            },
-            onTaskEditListener = { task ->
-                // Navigate to Tasks tab for editing
-                (activity as? MainActivity)?.navigateToTasks()
-            },
-            onTaskDeleteListener = { task ->
-                viewModel.deleteTask(task)
-                Snackbar.make(requireView(), "Task deleted", Snackbar.LENGTH_SHORT).show()
+                // Show feedback
+                val message = if (isChecked) "Task completed!" else "Task marked pending"
+                Snackbar.make(requireView(), message, Snackbar.LENGTH_SHORT).show()
             }
         )
-        recyclerView.adapter = taskAdapter
+        recyclerView.adapter = timelineAdapter
     }
 
     private fun setupViewModels() {
@@ -102,13 +102,20 @@ class DashboardFragment : Fragment() {
 
         sharedViewModel = ViewModelProvider(requireActivity()).get(SharedViewModel::class.java)
 
+        // Observe all tasks
         viewModel.tasks.observe(viewLifecycleOwner) { tasks ->
-            taskAdapter.updateTasks(tasks)
+            // Filter tasks for current month
+            val monthTasks = filterTasksForCurrentMonth(tasks)
+            timelineAdapter.updateTasks(monthTasks)
+
+            // Show/hide no tasks message
+            updateNoTasksVisibility(monthTasks)
         }
 
         viewModel.selectedDate.observe(viewLifecycleOwner) { dateInMillis ->
             selectedDate.timeInMillis = dateInMillis
             updateMonthDisplay()
+            loadTasksForCurrentMonth()
         }
 
         sharedViewModel.currentMonth.observe(viewLifecycleOwner) { newMonth ->
@@ -131,6 +138,49 @@ class DashboardFragment : Fragment() {
             } catch (e: Exception) {
                 Toast.makeText(context, "Profile clicked", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun loadTasksForCurrentMonth() {
+        // Get the start of the month (first day at 00:00:00)
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = selectedDate.timeInMillis
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val startOfMonth = calendar.timeInMillis
+
+        // Get the end of the month (last day at 23:59:59)
+        calendar.set(Calendar.DAY_OF_MONTH, calendar.getActualMaximum(Calendar.DAY_OF_MONTH))
+        calendar.set(Calendar.HOUR_OF_DAY, 23)
+        calendar.set(Calendar.MINUTE, 59)
+        calendar.set(Calendar.SECOND, 59)
+        calendar.set(Calendar.MILLISECOND, 999)
+        val endOfMonth = calendar.timeInMillis
+
+        // Load tasks for the month range
+        viewModel.loadTasksForDateRange(startOfMonth, endOfMonth)
+    }
+    private fun filterTasksForCurrentMonth(tasks: List<Task>): List<Task> {
+        val calendar = Calendar.getInstance()
+
+        return tasks.filter { task ->
+            calendar.timeInMillis = task.date
+            calendar.get(Calendar.MONTH) == selectedDate.get(Calendar.MONTH) &&
+                    calendar.get(Calendar.YEAR) == selectedDate.get(Calendar.YEAR)
+        }.sortedBy { task -> task.date } // Sort by date
+    }
+
+    private fun updateNoTasksVisibility(tasks: List<Task>) {
+        if (tasks.isEmpty()) {
+            tvNoTasks.visibility = View.VISIBLE
+            recyclerView.visibility = View.GONE
+        } else {
+            tvNoTasks.visibility = View.GONE
+            recyclerView.visibility = View.VISIBLE
         }
     }
 

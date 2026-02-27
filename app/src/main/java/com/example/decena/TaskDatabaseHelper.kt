@@ -86,31 +86,13 @@ class TaskDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         }
     }
 
-    fun getTasksForDate(dateInMillis: Long): List<Task> {
+    fun getTasksForDateRange(startDate: Long, endDate: Long): List<Task> {
         synchronized(dbLock) {
             val tasks = mutableListOf<Task>()
             val db = readableDatabase
 
-            // Get start of the day (midnight)
-            val calendar = Calendar.getInstance().apply {
-                timeInMillis = dateInMillis
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            val startOfDay = calendar.timeInMillis
-
-            // Get end of the day (23:59:59.999)
-            calendar.set(Calendar.HOUR_OF_DAY, 23)
-            calendar.set(Calendar.MINUTE, 59)
-            calendar.set(Calendar.SECOND, 59)
-            calendar.set(Calendar.MILLISECOND, 999)
-            val endOfDay = calendar.timeInMillis
-
-            // Query to get tasks for the day
-            val query = "SELECT * FROM $TABLE_NAME WHERE $COLUMN_DATE >= ? AND $COLUMN_DATE <= ? ORDER BY $COLUMN_TIME ASC"
-            val cursor = db.rawQuery(query, arrayOf(startOfDay.toString(), endOfDay.toString()))
+            val query = "SELECT * FROM $TABLE_NAME WHERE $COLUMN_DATE >= ? AND $COLUMN_DATE <= ? ORDER BY $COLUMN_DATE ASC"
+            val cursor = db.rawQuery(query, arrayOf(startDate.toString(), endDate.toString()))
 
             try {
                 while (cursor.moveToNext()) {
@@ -130,7 +112,7 @@ class TaskDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
                 cursor.close()
             }
 
-            println("📊 Found ${tasks.size} tasks for date: ${Date(dateInMillis)}")
+            println("📊 Found ${tasks.size} tasks between ${Date(startDate)} and ${Date(endDate)}")
             return tasks
         }
     }
@@ -152,6 +134,26 @@ class TaskDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
                 db.endTransaction()
             }
         }
+    }
+    fun getTasksForDate(dateInMillis: Long): List<Task> {
+        // Calculate start and end of the day
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = dateInMillis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val startOfDay = calendar.timeInMillis
+
+        calendar.set(Calendar.HOUR_OF_DAY, 23)
+        calendar.set(Calendar.MINUTE, 59)
+        calendar.set(Calendar.SECOND, 59)
+        calendar.set(Calendar.MILLISECOND, 999)
+        val endOfDay = calendar.timeInMillis
+
+        // Use the date range method
+        return getTasksForDateRange(startOfDay, endOfDay)
     }
 
     fun deleteTask(taskId: Int) {

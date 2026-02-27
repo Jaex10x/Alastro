@@ -39,9 +39,7 @@
             android:layout_width="28dp"
             android:layout_height="28dp"
             android:src="@drawable/ic_profile_placeholder"
-            app:tint="@color/accent_red"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:tint="@color/accent_red" />
     </LinearLayout>
 
     <View
@@ -66,10 +64,19 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <include layout="@layout/item_timeline_task" />
-            <include layout="@layout/item_timeline_task" />
-            <include layout="@layout/item_timeline_task" />
-            <include layout="@layout/item_timeline_task" />
+            <!-- No tasks message -->
+            <TextView
+                android:id="@+id/tvNoTasks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No tasks for this month"
+                android:textSize="16sp"
+                android:textColor="#999999"
+                android:gravity="center"
+                android:padding="32dp"
+                android:visibility="gone" />
+
+            <!-- RecyclerView will be added programmatically here -->
 
         </LinearLayout>
     </ScrollView>

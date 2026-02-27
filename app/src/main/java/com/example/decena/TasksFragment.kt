@@ -1,15 +1,19 @@
 package com.example.decena
 
-import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
-import android.graphics.Paint
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -21,11 +25,12 @@ import java.util.*
 class TasksFragment : Fragment() {
 
     private lateinit var tasksContainer: LinearLayout
-    private lateinit var btnAddTask: View
+    private lateinit var btnAddTask: ImageView
     private lateinit var imgProfile: ImageView
     private lateinit var todayTextView: TextView
     private lateinit var recyclerView: RecyclerView
-    private lateinit var taskAdapter: TaskAdapter
+    // Change this to TimelineTaskAdapter
+    private lateinit var taskAdapter: TimelineTaskAdapter
     private lateinit var viewModel: TasksViewModel
     private lateinit var databaseHelper: TaskDatabaseHelper
 
@@ -47,6 +52,10 @@ class TasksFragment : Fragment() {
             setupRecyclerView()
             setupViewModel()
             setupClickListeners(view)
+
+            // Add this line to debug database contents
+            debugDatabaseContents()
+
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
@@ -89,18 +98,13 @@ class TasksFragment : Fragment() {
         tasksContainer.addView(todayTextView)
         tasksContainer.addView(recyclerView)
 
-        taskAdapter = TaskAdapter(
+        // Initialize TimelineTaskAdapter (not TaskAdapter)
+        taskAdapter = TimelineTaskAdapter(
             tasks = emptyList(),
             onTaskCheckedListener = { task, isChecked ->
                 viewModel.updateTaskCompletion(task.id, isChecked)
-            },
-            onTaskEditListener = { task ->
-                showTaskDialog(task)
-            },
-            onTaskDeleteListener = { task ->
-                viewModel.deleteTask(task)
-                Snackbar.make(requireView(), "Task deleted", Snackbar.LENGTH_SHORT).show()
             }
+            // Note: TimelineTaskAdapter doesn't have edit/delete listeners
         )
         recyclerView.adapter = taskAdapter
     }
@@ -167,74 +171,34 @@ class TasksFragment : Fragment() {
     }
 
     private fun updateTasksList(tasks: List<Task>) {
+        // Filter tasks for the selected date
+        val tasksForSelectedDate = tasks.filter { task ->
+            val taskCalendar = Calendar.getInstance().apply {
+                timeInMillis = task.date
+            }
+            taskCalendar.get(Calendar.YEAR) == selectedDate.get(Calendar.YEAR) &&
+                    taskCalendar.get(Calendar.DAY_OF_YEAR) == selectedDate.get(Calendar.DAY_OF_YEAR)
+        }
+
         // Update the "Today" text with task count
         val baseText = if (todayTextView.text.contains("(")) {
             todayTextView.text.toString().substringBefore(" (")
         } else {
             todayTextView.text.toString()
         }
-        todayTextView.text = "$baseText (${tasks.size} tasks)"
+        todayTextView.text = "$baseText (${tasksForSelectedDate.size} tasks)"
 
-        // Update adapter
-        taskAdapter.updateTasks(tasks)
+        // Update adapter with filtered tasks
+        taskAdapter.updateTasks(tasksForSelectedDate)
 
-        // Force RecyclerView to refresh
-        recyclerView.post {
-            taskAdapter.notifyDataSetChanged()
-        }
-
-        Log.d("TasksFragment", "UI updated with ${tasks.size} tasks")
+        Log.d("TasksFragment", "UI updated with ${tasksForSelectedDate.size} tasks for selected date")
     }
 
     private fun showTaskDialog(existingTask: Task?) {
         val dialogView = layoutInflater.inflate(R.layout.dialog_add_task, null)
-
         val etTaskName = dialogView.findViewById<EditText>(R.id.etTaskName)
-        val btnDate = dialogView.findViewById<Button>(R.id.btnPickDate)
-        val btnTime = dialogView.findViewById<Button>(R.id.btnPickTime)
 
-        var selectedDateInMillis = selectedDate.timeInMillis
-        var selectedDateStr = ""
-        var selectedTimeStr = ""
-
-        if (existingTask != null) {
-            etTaskName.setText(existingTask.title)
-
-            val calendar = Calendar.getInstance().apply {
-                timeInMillis = existingTask.date
-            }
-            selectedDateInMillis = existingTask.date
-            selectedDateStr = dateFormatter.format(calendar.time)
-            btnDate.text = selectedDateStr
-            selectedTimeStr = existingTask.time
-            btnTime.text = selectedTimeStr
-        } else {
-            // For new tasks, set default date to selected date
-            selectedDateStr = dateFormatter.format(Date(selectedDateInMillis))
-            btnDate.text = selectedDateStr
-        }
-
-        btnDate.setOnClickListener {
-            val calendar = Calendar.getInstance()
-            DatePickerDialog(requireContext(), { _, year, month, day ->
-                calendar.set(year, month, day)
-                selectedDateInMillis = calendar.timeInMillis
-                selectedDateStr = dateFormatter.format(calendar.time)
-                btnDate.text = selectedDateStr
-            }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
-        }
-
-        btnTime.setOnClickListener {
-            val calendar = Calendar.getInstance()
-            TimePickerDialog(requireContext(), { _, hour, minute ->
-                val amPm = if (hour >= 12) "PM" else "AM"
-                val hour12 = if (hour > 12) hour - 12 else if (hour == 0) 12 else hour
-                val minStr = String.format("%02d", minute)
-                selectedTimeStr = "$hour12:$minStr $amPm"
-                btnTime.text = selectedTimeStr
-            }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), false).show()
-        }
-
+        // Simple dialog with just task name for testing
         AlertDialog.Builder(requireContext())
             .setTitle(if (existingTask == null) "New Task" else "Edit Task")
             .setView(dialogView)
@@ -246,40 +210,37 @@ class TasksFragment : Fragment() {
                     return@setPositiveButton
                 }
 
-                if (selectedDateStr.isEmpty()) {
-                    selectedDateStr = dateFormatter.format(Date(selectedDateInMillis))
-                }
+                // Use current date and time
+                val now = System.currentTimeMillis()
+                val calendar = Calendar.getInstance().apply { timeInMillis = now }
+                val timeStr = String.format("%d:%02d %s",
+                    calendar.get(Calendar.HOUR_OF_DAY).let { if (it > 12) it - 12 else if (it == 0) 12 else it },
+                    calendar.get(Calendar.MINUTE),
+                    if (calendar.get(Calendar.HOUR_OF_DAY) >= 12) "PM" else "AM"
+                )
 
-                if (selectedTimeStr.isEmpty()) {
-                    selectedTimeStr = "12:00 PM"
-                }
+                val newTask = Task(
+                    id = existingTask?.id ?: 0,
+                    title = taskText,
+                    description = existingTask?.description ?: "",
+                    date = now,
+                    time = timeStr,
+                    priority = existingTask?.priority ?: "Medium",
+                    category = existingTask?.category ?: "General",
+                    isCompleted = existingTask?.isCompleted ?: false
+                )
 
                 if (existingTask == null) {
-                    // CREATE NEW TASK
-                    val newTask = Task(
-                        title = taskText,
-                        description = "",
-                        date = selectedDateInMillis,
-                        time = selectedTimeStr,
-                        priority = "Medium",
-                        category = "General",
-                        isCompleted = false
-                    )
-                    Log.d("TasksFragment", "Adding new task: $taskText")
                     viewModel.addTask(newTask)
-                    Snackbar.make(requireView(), "Task added: $taskText", Snackbar.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "Adding: $taskText", Toast.LENGTH_SHORT).show()
                 } else {
-                    // UPDATE EXISTING TASK
-                    val updatedTask = existingTask.copy(
-                        title = taskText,
-                        date = selectedDateInMillis,
-                        time = selectedTimeStr
-                    )
-                    Log.d("TasksFragment", "Updating task: $taskText")
                     viewModel.deleteTask(existingTask)
-                    viewModel.addTask(updatedTask)
-                    Snackbar.make(requireView(), "Task updated", Snackbar.LENGTH_SHORT).show()
+                    viewModel.addTask(newTask)
+                    Toast.makeText(requireContext(), "Updating: $taskText", Toast.LENGTH_SHORT).show()
                 }
+
+                // Show count of tasks after operation
+                viewModel.loadTasks()
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -305,5 +266,17 @@ class TasksFragment : Fragment() {
         }
         return calendar.get(Calendar.YEAR) == yesterday.get(Calendar.YEAR) &&
                 calendar.get(Calendar.DAY_OF_YEAR) == yesterday.get(Calendar.DAY_OF_YEAR)
+    }
+    private fun debugDatabaseContents() {
+        // Force a fresh load from database
+        viewModel.loadTasks()
+
+        // Also query directly to see all tasks
+        val allTasks = databaseHelper.getAllTasks()
+        Log.d("TasksFragment", "=== DIRECT DATABASE QUERY ===")
+        Log.d("TasksFragment", "Total tasks in DB: ${allTasks.size}")
+        allTasks.forEach { task ->
+            Log.d("TasksFragment", "DB Task: id=${task.id}, title='${task.title}', date=${task.date}, time='${task.time}'")
+        }
     }
 }

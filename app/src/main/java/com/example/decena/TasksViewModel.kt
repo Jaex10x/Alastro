@@ -7,94 +7,76 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import java.util.*
 
-class TasksViewModel : ViewModel() {
+class TasksViewModel(private val databaseHelper: TaskDatabaseHelper) : ViewModel() {
 
-    private val _tasks = MutableLiveData<List<Task>>(emptyList())
+    private val _tasks = MutableLiveData<List<Task>>()
     val tasks: LiveData<List<Task>> = _tasks
 
-    private val _selectedDate = MutableLiveData<Long>(System.currentTimeMillis())
+    private val _selectedDate = MutableLiveData<Long>()
     val selectedDate: LiveData<Long> = _selectedDate
 
-    private lateinit var databaseHelper: TaskDatabaseHelper
-    private val mutex = Mutex()
-
-    fun initializeDatabase(helper: TaskDatabaseHelper) {
-        this.databaseHelper = helper
-        loadTasksForSelectedDate()
+    init {
+        // Set default selected date to today
+        _selectedDate.value = System.currentTimeMillis()
+        loadTasks()
     }
 
-    fun setSelectedDate(dateInMillis: Long) {
-        _selectedDate.value = dateInMillis
-        loadTasksForSelectedDate()
-    }
-
-    fun loadTasksForSelectedDate() {
-        val date = _selectedDate.value ?: return
-
+    fun loadTasks() {
         viewModelScope.launch {
-            try {
-                val tasks = withContext(Dispatchers.IO) {
-                    databaseHelper.getTasksForDate(date)
-                }
-                _tasks.postValue(tasks)
-                println("🔄 ViewModel loaded ${tasks.size} tasks")
-            } catch (e: Exception) {
-                e.printStackTrace()
+            val allTasks = withContext(Dispatchers.IO) {
+                databaseHelper.getAllTasks()
             }
+            _tasks.postValue(allTasks)
+        }
+    }
+
+    fun loadTasksForDate(dateInMillis: Long) {
+        viewModelScope.launch {
+            val tasksForDate = withContext(Dispatchers.IO) {
+                databaseHelper.getTasksForDate(dateInMillis)
+            }
+            _tasks.postValue(tasksForDate)
+        }
+    }
+
+    fun loadTasksForDateRange(startDate: Long, endDate: Long) {
+        viewModelScope.launch {
+            val tasksInRange = withContext(Dispatchers.IO) {
+                databaseHelper.getTasksForDateRange(startDate, endDate)
+            }
+            _tasks.postValue(tasksInRange)
         }
     }
 
     fun addTask(task: Task) {
         viewModelScope.launch {
-            mutex.withLock {
-                try {
-                    // Add task to database
-                    val id = withContext(Dispatchers.IO) {
-                        databaseHelper.addTask(task)
-                    }
-                    println("➕ Task added with ID: $id")
-
-                    // Immediately reload tasks
-                    loadTasksForSelectedDate()
-
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+            withContext(Dispatchers.IO) {
+                databaseHelper.addTask(task)
             }
+            loadTasks()
         }
     }
 
     fun updateTaskCompletion(taskId: Int, isCompleted: Boolean) {
         viewModelScope.launch {
-            mutex.withLock {
-                try {
-                    withContext(Dispatchers.IO) {
-                        databaseHelper.updateTaskCompletion(taskId, isCompleted)
-                    }
-                    loadTasksForSelectedDate()
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+            withContext(Dispatchers.IO) {
+                databaseHelper.updateTaskCompletion(taskId, isCompleted)
             }
+            loadTasks()
         }
     }
 
     fun deleteTask(task: Task) {
         viewModelScope.launch {
-            mutex.withLock {
-                try {
-                    withContext(Dispatchers.IO) {
-                        databaseHelper.deleteTask(task.id)
-                    }
-                    loadTasksForSelectedDate()
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+            withContext(Dispatchers.IO) {
+                databaseHelper.deleteTask(task.id)
             }
+            loadTasks()
         }
+    }
+
+    fun setSelectedDate(dateInMillis: Long) {
+        _selectedDate.value = dateInMillis
     }
 }
